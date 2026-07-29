@@ -4,6 +4,18 @@ import matplotlib.pyplot as plt
 from scipy.integrate import solve_ivp
 
 
+def get_theta_ref(t):
+    """Calcola il riferimento d'assetto theta_ref in radianti in funzione del tempo."""
+    if t < 20.0:
+        return np.radians(-20.0)
+    elif t < 28.0:
+        p = (t - 20.0) / 8.0
+        smooth_factor = 3 * p**2 - 2 * p**3
+        return np.radians(-20.0 + 110.0 * smooth_factor)
+    else:
+        return np.radians(90.0)
+
+
 class USStandardAtmosphere1976:
     """Classe per la modellazione dell'atmosfera standard U.S. 1976 a più strati."""
     @staticmethod
@@ -30,33 +42,29 @@ class USStandardAtmosphere1976:
 
 class AeroDatabase:
     """
-    Database aerodinamico multi-regime.
-    Surrogato analitico a chiusura rapida calibrato sui dati NASA per i tre regimi.
+    Database aerodinamico multi-regime continuo.
+    Formulazione continua per angoli d'attacco estesi (0-360 deg) durante la manovra di flip.
     """
     @staticmethod
     def get_coefficients(Mach, alpha):
-        # 1. Regime Ipersonico (Teoria Newtoniana Modificata)
         if Mach > 5.0:
-            Cd = 1.6 * (np.sin(alpha)**3) + 0.1
-            Cl = 1.2 * (np.sin(alpha)**2) * np.cos(alpha)
-            Cm_0 = -0.05 * alpha
-        # 2. Regime Supersonico/Transonico (Interpolazione dati empirici NASA)
+            Cd = 1.6 * (np.sin(alpha)**2) + 0.1
+            Cl = 1.2 * np.sin(2 * alpha)
+            Cm_0 = -0.05 * np.sin(alpha)
         elif Mach >= 0.8:
-            Cd = 1.2 + 0.3 * (Mach - 0.8)
-            Cl = 1.5 * np.sin(2 * alpha)
-            Cm_0 = -0.08 * alpha
-        # 3. Regime Subsonico (Correzione di Prandtl-Glauert)
+            Cd = 1.2 * (np.sin(alpha)**2) + 0.15
+            Cl = 1.1 * np.sin(2 * alpha)
+            Cm_0 = -0.08 * np.sin(alpha)
         else:
-            beta = np.sqrt(max(1.0 - Mach**2, 0.1))
-            Cd = 0.8 / beta
-            Cl = (2.0 * np.pi * alpha) / beta
-            Cm_0 = -0.1 * alpha
+            Cd = 1.0 * (np.sin(alpha)**2) + 0.1
+            Cl = 0.8 * np.sin(2 * alpha)
+            Cm_0 = -0.1 * np.sin(alpha)
             
         return Cd, Cl, Cm_0
 
 
 class FlightController:
-    """Controllore d'assetto e Allocatore di Controllo Riconfigurabile Dinamico."""
+    """Controllore d'assetto e Allocatore di Controllo Riconfigurabile Dinamico (FTC)."""
     def __init__(self):
         self.fdi_active = False
         self.stuck_index = None
@@ -100,7 +108,7 @@ class Starship3DOF:
         self.Iyy = 2.5e7     # kg*m^2
         self.S_ref = 450.0   # m^2
         self.c_chord = 9.0   # m
-        self.B_0 = np.array([400.0, 400.0, -500.0, -500.0])
+        self.B_0 = np.array([25000.0, 25000.0, -30000.0, -30000.0])
         self.controller = FlightController()
 
     def equations_of_motion(self, t, state, t_fault, stuck_idx, delta_stuck):
@@ -110,7 +118,7 @@ class Starship3DOF:
         
         rho = USStandardAtmosphere1976.get_density(altitude)
         
-        # Raffica 1-coseno
+        # Raffica di vento 1-coseno
         w_x, w_z = 0.0, 0.0
         if 5.0 <= t <= 8.0:
             W_max = 15.0 # m/s
@@ -134,17 +142,15 @@ class Starship3DOF:
         if t >= t_fdi and not self.controller.fdi_active:
             self.controller.set_fault(stuck_idx, delta_stuck)
             
-        # PID con Gain Scheduling e Anti-Windup
-        theta_ref = np.radians(-20.0) if t < 20 else np.radians(90.0)
+        theta_ref = get_theta_ref(t)
         error = theta_ref - theta
         
-        q_ref = 3000.0 # Pa
-        q_factor = max(q_inf / q_ref, 0.1)
-        kp = 2.5e6 * q_factor
-        kd = 8.0e6 * q_factor
-        ki = 4.0e5 * q_factor
+        # PID ottimizzato
+        kp = 3.0e7
+        kd = 2.0e7
+        ki = 5.0e5
         
-        e_int_max = np.radians(10.0)
+        e_int_max = np.radians(5.0)
         if abs(e_int) >= e_int_max and np.sign(error) == np.sign(e_int):
             de_int_dt = 0.0
         else:
@@ -184,15 +190,15 @@ if __name__ == '__main__':
     
     ship = Starship3DOF()
     
-    # Condizioni Iniziali (x=0 m, z=15000 m, vx=250 m/s, vz=-60 m/s, theta=-20 deg)
-    y0 = [0.0, 15000.0, 250.0, -60.0, np.radians(-20.0), 0.0, 0.0]
-    t_span = (0.0, 35.0)
-    t_eval = np.linspace(0.0, 35.0, 1000)
+    # Condizioni Iniziali (x=0 m, z=15000 m, vx=120 m/s, vz=-70 m/s, theta=-20 deg)
+    y0 = [0.0, 15000.0, 120.0, -70.0, np.radians(-20.0), 0.0, 0.0]
+    t_span = (0.0, 40.0)
+    t_eval = np.linspace(0.0, 40.0, 1000)
     
     # Scenario Guasto: t_fault = 10.0 s, Flap FL (indice 0) bloccato a +15.0 deg
     t_fault = 10.0
     stuck_idx = 0
-    delta_stuck = 15.0
+    delta_stuck = np.radians(15.0)
     
     print("\n[1/3] Integrazione numerica delle equazioni del moto in corso...")
     sol = solve_ivp(
@@ -206,39 +212,45 @@ if __name__ == '__main__':
     
     print(f"      Simulazione completata con successo! ({len(sol.t)} passi temporali)")
     print(f"      - Quota iniziale: {y0[1]:.1f} m  -> Quota finale: {sol.y[1][-1]:.1f} m")
-    print(f"      - Guasto iniettato: t = {t_fault:.1f} s (Flap FL bloccato a +{delta_stuck:.1f}°)")
+    print(f"      - Guasto iniettato: t = {t_fault:.1f} s (Flap FL bloccato a +15.0°)")
     print(f"      - Diagnosi FDI + Riconfigurazione: t = {t_fault + 0.5:.1f} s")
     
     print("\n[2/3] Generazione dei grafici di rientro...")
     
-    # Plotting risultati
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 7), sharex=True)
     
     # Grafico 1: Quota
-    ax1.plot(sol.t, sol.y[1] / 1000.0, 'b-', linewidth=2.0, label='Quota $z(t)$')
+    ax1.plot(sol.t, sol.y[1] / 1000.0, 'b-', linewidth=2.0, label=r'Quota $z(t)$')
     ax1.axvline(t_fault, color='r', linestyle='--', alpha=0.7, label='Evento Guasto (t=10s)')
     ax1.axvline(t_fault + 0.5, color='g', linestyle=':', alpha=0.9, label='Riconfigurazione FTC (t=10.5s)')
-    ax1.set_ylabel('Quota $z$ [km]')
-    ax1.set_title('Traiettoria e Risposta al Guasto dell\'Attuatore')
+    ax1.set_ylabel(r'Quota $z$ [km]')
+    ax1.set_title("Traiettoria e Risposta al Guasto dell'Attuatore")
     ax1.grid(True, linestyle='--', alpha=0.6)
     ax1.legend(loc='upper right')
     
     # Grafico 2: Angolo di beccheggio vs Riferimento
     theta_deg = np.degrees(sol.y[4])
-    theta_ref_deg = np.where(sol.t < 20.0, -20.0, 90.0)
+    theta_ref_deg = np.degrees([get_theta_ref(t_val) for t_val in sol.t])
     
-    ax2.plot(sol.t, theta_deg, 'k-', linewidth=2.0, label='Beccheggio effettivo $\\theta(t)$')
-    ax2.plot(sol.t, theta_ref_deg, 'r--', linewidth=1.5, label='Riferimento $\\theta_{\\text{ref}}$')
+    ax2.plot(sol.t, theta_deg, 'k-', linewidth=2.0, label=r'Beccheggio effettivo $\theta(t)$')
+    ax2.plot(sol.t, theta_ref_deg, 'r--', linewidth=1.5, label=r'Riferimento $\theta_{\mathrm{ref}}$')
     ax2.axvline(t_fault, color='r', linestyle='--', alpha=0.7)
     ax2.axvline(t_fault + 0.5, color='g', linestyle=':', alpha=0.9)
-    ax2.set_xlabel('Tempo $t$ [s]')
-    ax2.set_ylabel('Assetto $\\theta$ [deg]')
+    ax2.set_xlabel(r'Tempo $t$ [s]')
+    ax2.set_ylabel(r'Assetto $\theta$ [deg]')
     ax2.grid(True, linestyle='--', alpha=0.6)
     ax2.legend(loc='lower right')
     
     plt.tight_layout()
     
-    output_png = 'simulation_results.png'
+    try:
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+    except NameError:
+        base_dir = os.path.expanduser('~/Desktop')
+
+    output_png = os.path.join(base_dir, 'simulation_results.png')
+    
     plt.savefig(output_png, dpi=300)
-    print(f"[3/3] Grafico salvato con successo come '{output_png}'.")
-    print("\nSimulazione conclusa. Il sistema è pronto all'uso!")
+    print(f"[3/3] Grafico salvato con successo in:\n      {output_png}")
+    print("\nSimulazione conclusa. Mostro la figura...")
+    plt.show()
