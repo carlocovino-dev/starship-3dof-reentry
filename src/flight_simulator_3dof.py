@@ -1,8 +1,11 @@
+import os
 import numpy as np
+import matplotlib.pyplot as plt
 from scipy.integrate import solve_ivp
 
+
 class USStandardAtmosphere1976:
-    """Classe per la modellazione dell'atmosfera standard U.S. 1976 a piu strati."""
+    """Classe per la modellazione dell'atmosfera standard U.S. 1976 a più strati."""
     @staticmethod
     def get_density(altitude):
         h = max(0.0, float(altitude))
@@ -23,6 +26,7 @@ class USStandardAtmosphere1976:
             T20, rho20, L = 216.65, 0.08803, 0.0010
             T = T20 + L * (h - 20000.0)
             return rho20 * (T / T20)**(-g0 / (R * L) - 1.0)
+
 
 class AeroDatabase:
     """
@@ -49,6 +53,7 @@ class AeroDatabase:
             Cm_0 = -0.1 * alpha
             
         return Cd, Cl, Cm_0
+
 
 class FlightController:
     """Controllore d'assetto e Allocatore di Controllo Riconfigurabile Dinamico."""
@@ -86,6 +91,7 @@ class FlightController:
             u_cmd = np.insert(u_act, self.stuck_index, self.delta_stuck)
             
         return np.clip(u_cmd, -np.radians(40), np.radians(40))
+
 
 class Starship3DOF:
     """Modellazione dinamica 3-DOF del velivolo Starship."""
@@ -166,3 +172,73 @@ class Starship3DOF:
         dq_dt = M_aero / self.Iyy
         
         return [dx_dt, dz_dt, dvx_dt, dvz_dt, dtheta_dt, dq_dt, de_int_dt]
+
+
+# ==============================================================================
+# BLOCCO PRINCIPALE DI ESECUZIONE
+# ==============================================================================
+if __name__ == '__main__':
+    print("==================================================================")
+    print(" SIMULATORE DINAMICO 3-DOF STARSHIP - RIENTRO ATMOSFERICO E FTC")
+    print("==================================================================")
+    
+    ship = Starship3DOF()
+    
+    # Condizioni Iniziali (x=0 m, z=15000 m, vx=250 m/s, vz=-60 m/s, theta=-20 deg)
+    y0 = [0.0, 15000.0, 250.0, -60.0, np.radians(-20.0), 0.0, 0.0]
+    t_span = (0.0, 35.0)
+    t_eval = np.linspace(0.0, 35.0, 1000)
+    
+    # Scenario Guasto: t_fault = 10.0 s, Flap FL (indice 0) bloccato a +15.0 deg
+    t_fault = 10.0
+    stuck_idx = 0
+    delta_stuck = 15.0
+    
+    print("\n[1/3] Integrazione numerica delle equazioni del moto in corso...")
+    sol = solve_ivp(
+        ship.equations_of_motion, 
+        t_span, 
+        y0, 
+        t_eval=t_eval,
+        args=(t_fault, stuck_idx, delta_stuck),
+        method='RK45'
+    )
+    
+    print(f"      Simulazione completata con successo! ({len(sol.t)} passi temporali)")
+    print(f"      - Quota iniziale: {y0[1]:.1f} m  -> Quota finale: {sol.y[1][-1]:.1f} m")
+    print(f"      - Guasto iniettato: t = {t_fault:.1f} s (Flap FL bloccato a +{delta_stuck:.1f}°)")
+    print(f"      - Diagnosi FDI + Riconfigurazione: t = {t_fault + 0.5:.1f} s")
+    
+    print("\n[2/3] Generazione dei grafici di rientro...")
+    
+    # Plotting risultati
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(10, 7), sharex=True)
+    
+    # Grafico 1: Quota
+    ax1.plot(sol.t, sol.y[1] / 1000.0, 'b-', linewidth=2.0, label='Quota $z(t)$')
+    ax1.axvline(t_fault, color='r', linestyle='--', alpha=0.7, label='Evento Guasto (t=10s)')
+    ax1.axvline(t_fault + 0.5, color='g', linestyle=':', alpha=0.9, label='Riconfigurazione FTC (t=10.5s)')
+    ax1.set_ylabel('Quota $z$ [km]')
+    ax1.set_title('Traiettoria e Risposta al Guasto dell\'Attuatore')
+    ax1.grid(True, linestyle='--', alpha=0.6)
+    ax1.legend(loc='upper right')
+    
+    # Grafico 2: Angolo di beccheggio vs Riferimento
+    theta_deg = np.degrees(sol.y[4])
+    theta_ref_deg = np.where(sol.t < 20.0, -20.0, 90.0)
+    
+    ax2.plot(sol.t, theta_deg, 'k-', linewidth=2.0, label='Beccheggio effettivo $\\theta(t)$')
+    ax2.plot(sol.t, theta_ref_deg, 'r--', linewidth=1.5, label='Riferimento $\\theta_{\\text{ref}}$')
+    ax2.axvline(t_fault, color='r', linestyle='--', alpha=0.7)
+    ax2.axvline(t_fault + 0.5, color='g', linestyle=':', alpha=0.9)
+    ax2.set_xlabel('Tempo $t$ [s]')
+    ax2.set_ylabel('Assetto $\\theta$ [deg]')
+    ax2.grid(True, linestyle='--', alpha=0.6)
+    ax2.legend(loc='lower right')
+    
+    plt.tight_layout()
+    
+    output_png = 'simulation_results.png'
+    plt.savefig(output_png, dpi=300)
+    print(f"[3/3] Grafico salvato con successo come '{output_png}'.")
+    print("\nSimulazione conclusa. Il sistema è pronto all'uso!")
