@@ -1,5 +1,6 @@
 import numpy as np
 
+
 class Atmosphere1976:
     """Modello US Standard Atmosphere 1976 esteso a piu strati."""
     R = 287.05      # Costante specifica dell'aria secca [J/(kg*K)]
@@ -73,3 +74,52 @@ class Starship3DOF:
         q_dot = My / self.Iyy
         
         return [vx, vz, ax, az, q, q_dot]
+
+
+# Modello aerodinamico di test per la valutazione della dinamica
+class MockAeroModel:
+    @staticmethod
+    def get_coefficients(alpha, Mach, d_FL, d_FR, d_AL, d_AR):
+        CL = 0.8 * np.sin(2 * alpha)
+        CD = 1.0 * (np.sin(alpha)**2) + 0.1
+        Cm = -0.1 * np.sin(alpha) + 0.05 * (d_FL + d_FR - d_AL - d_AR)
+        return CL, CD, Cm
+
+
+# ==============================================================================
+# BLOCCO DI TEST PER L'ESECUZIONE
+# ==============================================================================
+if __name__ == '__main__':
+    print("==================================================================")
+    print(" TEST ATMOSFERA 1976 E DINAMICA STARSHIP 3-DOF")
+    print("==================================================================")
+
+    # 1. Test modello Atmosfera a 15 km
+    z_test = 15000.0
+    rho, a = Atmosphere1976.get_properties(z_test)
+    print(f"\n[Atmosphere1976] Proprietà a z = {z_test/1000:.1f} km:")
+    print(f"  - Densità aria (rho)   : {rho:.4f} kg/m^3")
+    print(f"  - Velocità suono (a)   : {a:.2f} m/s")
+
+    # 2. Test calcolo derivate dinamiche
+    ship = Starship3DOF()
+    aero_model = MockAeroModel()
+
+    # Stato: [x=0m, z=15000m, vx=120m/s, vz=-70m/s, theta=-20deg, q=0rad/s]
+    state0 = [0.0, 15000.0, 120.0, -70.0, np.radians(-20.0), 0.0]
+    
+    # Deflessioni flap di test (in radianti)
+    d_FL = np.radians(5.0)
+    d_FR = np.radians(5.0)
+    d_AL = np.radians(-10.0)
+    d_AR = np.radians(-10.0)
+
+    derivatives = ship.dynamics_derivatives(0.0, state0, d_FL, d_FR, d_AL, d_AR, aero_model)
+
+    print(f"\n[Starship3DOF] Derivate dello stato calcolate a t = 0 s:")
+    print(f"  - Velocità x (vx)          : {derivatives[0]:+8.2f} m/s")
+    print(f"  - Velocità z (vz)          : {derivatives[1]:+8.2f} m/s")
+    print(f"  - Accelerazione x (ax)     : {derivatives[2]:+8.2f} m/s^2")
+    print(f"  - Accelerazione z (az)     : {derivatives[3]:+8.2f} m/s^2")
+    print(f"  - Velocità angolare (q)    : {derivatives[4]:+8.2f} rad/s")
+    print(f"  - Acc. angolare (q_dot)    : {derivatives[5]:+8.4f} rad/s^2")
