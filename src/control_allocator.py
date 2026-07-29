@@ -1,5 +1,6 @@
 import numpy as np
 
+
 class ControlAllocator:
     def __init__(self, d_min_deg=-40.0, d_max_deg=40.0):
         # Inizializza l'allocatore con i limiti fisici dei flap (rad)
@@ -44,3 +45,47 @@ class ControlAllocator:
             
         # Applicazione dei vincoli di saturazione geometrica (Clamping)
         return np.clip(u_cmd, self.delta_min, self.delta_max)
+
+
+# ==============================================================================
+# BLOCCO DI TEST PER L'ESECUZIONE
+# ==============================================================================
+if __name__ == '__main__':
+    print("==================================================================")
+    print(" TEST CONTROL ALLOCATOR (Pseudo-inversa pesata & FTC)")
+    print("==================================================================")
+
+    allocator = ControlAllocator(d_min_deg=-40.0, d_max_deg=40.0)
+
+    # Parametri di prova (Pressione dinamica q_inf = 3000 Pa)
+    q_inf = 3000.0 
+    B_0 = np.array([25000.0, 25000.0, -30000.0, -30000.0]) # N*m/Pa/rad
+    B_current = B_0 * q_inf
+
+    # Richiesta momento di beccheggio: +5,000,000 N*m
+    M_cmd = 5.0e6 
+
+    # 1. TEST CASO NOMINALE
+    u_nominal = allocator.allocate(M_cmd, B_current, fault_status=None)
+    u_nom_deg = np.degrees(u_nominal)
+
+    print("\n--- 1. CASO NOMINALE (4 Flap Attivi) ---")
+    print(f"Momento richiesto M_cmd: {M_cmd:.2e} N*m")
+    print(f"Deflessioni allocate [deg]:")
+    print(f"  Flap 0 (Front Left)  : {u_nom_deg[0]:+6.2f}°")
+    print(f"  Flap 1 (Front Right) : {u_nom_deg[1]:+6.2f}°")
+    print(f"  Flap 2 (Aft Left)    : {u_nom_deg[2]:+6.2f}°")
+    print(f"  Flap 3 (Aft Right)   : {u_nom_deg[3]:+6.2f}°")
+
+    # 2. TEST CASO GUASTO (FTC)
+    fault_scenario = {'index': 0, 'angle_deg': 15.0} # Flap 0 bloccato a +15 gradi
+    u_fault = allocator.allocate(M_cmd, B_current, fault_status=fault_scenario)
+    u_fault_deg = np.degrees(u_fault)
+
+    print("\n--- 2. CASO GUASTO E RICONFIGURAZIONE FTC ---")
+    print(f"Guasto iniettato: Flap {fault_scenario['index']} bloccato a +{fault_scenario['angle_deg']}°")
+    print(f"Deflessioni riconfigurate [deg]:")
+    print(f"  Flap 0 (Guasto)      : {u_fault_deg[0]:+6.2f}°")
+    print(f"  Flap 1 (Operativo)   : {u_fault_deg[1]:+6.2f}°")
+    print(f"  Flap 2 (Operativo)   : {u_fault_deg[2]:+6.2f}°")
+    print(f"  Flap 3 (Operativo)   : {u_fault_deg[3]:+6.2f}°")
