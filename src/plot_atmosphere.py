@@ -5,7 +5,7 @@ import numpy as np
 class Atmosphere1976:
     """Modello US Standard Atmosphere 1976 completo fino a 80 km.
     
-    Progettato per query puntuali ed essere importato come modulo nel simulatore 3-DOF.
+    Progettato per query puntuali ed essere importato come modulo nel simulatore a 3 GDL.
     """
     R = 287.05      # Costante specifica dell'aria secca [J/(kg*K)]
     g = 9.80665     # Accelerazione di gravita standard [m/s^2]
