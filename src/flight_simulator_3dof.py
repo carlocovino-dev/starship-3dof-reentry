@@ -27,7 +27,7 @@ def generate_pitch_transient_plot():
     # ---------------------------------------------------------
     # 1. SCENARIO NOMINALE
     # ---------------------------------------------------------
-    # Assetto di pancia a -20 deg, gradino a +90 deg a t = 20s.
+    # Assetto belly flop a -20 deg, gradino a +90 deg a t = 20s.
     # Parametri (wn=1.4, zeta=0.75) tarati per settling time ~ 4.2s e overshoot ~ 1.8 deg.
     theta_nom = second_order_step(t, 20.0, -20.0, 90.0, wn=1.4, zeta=0.75)
 
