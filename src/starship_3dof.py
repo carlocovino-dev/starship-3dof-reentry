@@ -54,10 +54,10 @@ class Starship3DOF:
         rho, a = Atmosphere1976.get_properties(z)
         q_inf = 0.5 * rho * V**2  # Pressione dinamica
         
-        # Estrazione coefficienti dal modello aerodinamico su 4 attuatori
+        # Estrazione coefficienti dal modello aerodinamico su 4 flap
         CL, CD, Cm = aero_model.get_coefficients(alpha, V / a, delta_FL, delta_FR, delta_AL, delta_AR)
         
-        # Forze nel sistema di riferimento vento
+        # Forze nel sistema di riferimento assi vento
         L = q_inf * self.S_ref * CL
         D = q_inf * self.S_ref * CD
         
