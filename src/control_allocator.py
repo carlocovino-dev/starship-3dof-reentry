@@ -3,7 +3,7 @@ import numpy as np
 
 class ControlAllocator:
     def __init__(self, d_min_deg=-40.0, d_max_deg=40.0):
-        # Inizializza l'allocatore con i limiti fisici dei flap (rad)
+        # Inizializza l'allocatore con i limiti fisici dei flap (espressi in rad)
         self.delta_min = np.radians(d_min_deg)
         self.delta_max = np.radians(d_max_deg)
         
@@ -12,7 +12,7 @@ class ControlAllocator:
         M_cmd: Momento di beccheggio richiesto [N*m]
         B_current: Matrice di efficacia attuale (1x4) [N*m/rad]
         """
-        # Caso 1: Funzionamento Nominale (4 attuatori attivi)
+        # Caso 1: Funzionamento nominale (4 attuatori attivi)
         if fault_status is None:
             # Matrice dei pesi (penalizza flap anteriori per limitare il drag)
             W = np.diag([1.5, 1.5, 1.0, 1.0]) 
@@ -43,7 +43,7 @@ class ControlAllocator:
             # Ricostruzione del vettore completo a 4 dimensioni
             u_cmd = np.insert(u_act, stuck_idx, delta_stuck)
             
-        # Applicazione dei vincoli di saturazione geometrica (Clamping)
+        # Applicazione dei vincoli di saturazione geometrica
         return np.clip(u_cmd, self.delta_min, self.delta_max)
 
 
@@ -78,7 +78,7 @@ if __name__ == '__main__':
     print(f"  Flap 3 (Aft Right)   : {u_nom_deg[3]:+6.2f}°")
 
     # 2. TEST CASO GUASTO (FTC)
-    fault_scenario = {'index': 0, 'angle_deg': 15.0} # Flap 0 bloccato a +15 gradi
+    fault_scenario = {'index': 0, 'angle_deg': 25.0} # Flap 0 bloccato a +25 gradi
     u_fault = allocator.allocate(M_cmd, B_current, fault_status=fault_scenario)
     u_fault_deg = np.degrees(u_fault)
 
