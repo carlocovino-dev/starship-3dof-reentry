@@ -16,7 +16,7 @@ class AeroDatabase:
     def evaluate(self, Mach, alpha):
         """
         Calcolo dei coefficienti aerodinamici all'istante di integrazione corrente.
-        Alpha in ingresso in RADIANTI -> Convertito in gradi per l'interpolatore.
+        Alpha in ingresso in radianti -> Convertito in gradi per l'interpolatore.
         """
         point = np.array([[Mach, np.degrees(alpha)]])
         C_L = float(self.cl_interp(point)[0])
