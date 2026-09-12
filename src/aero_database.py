@@ -57,6 +57,6 @@ if __name__ == '__main__':
     print(f"- Mach: {mach_test:.2f}")
     print(f"- Alpha: {np.degrees(alpha_test_rad):.2f}° ({alpha_test_rad:.4f} rad)")
     print(f"\nCoefficienti Interpolati:")
-    print(f"- C_L (Sostentamento) : {cl:.4f}")
+    print(f"- C_L (Portanza) : {cl:.4f}")
     print(f"- C_D (Resistenza)    : {cd:.4f}")
     print(f"- C_m (Beccheggio)    : {cm:.4f}")
